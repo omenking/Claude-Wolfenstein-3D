@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wolfenstein 3D Clone</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas { display: block; margin: auto; image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <img id="wallTexture" src="wall_texture.webp" style="display: none;">
+
+    <script>
+        // Constants
+        const SCREEN_WIDTH = 640;
+        const SCREEN_HEIGHT = 480;
+        const MAP_SIZE = 8;
+        const TILE_SIZE = 64;
+        const FOV = Math.PI / 3;
+        const HALF_FOV = FOV / 2;
+        const NUM_RAYS = SCREEN_WIDTH;
+        const PLAYER_SIZE = 10;
+        const TEXTURE_SIZE = 64;
+        const SCREEN_DIST = (SCREEN_WIDTH / 2) / Math.tan(FOV / 2);
+
+        // Game map (1 represents walls, 0 represents empty space)
+        const map = [
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1]
+        ];
+
+        // Player starting position
+        let playerX = TILE_SIZE * 1.5;
+        let playerY = TILE_SIZE * 1.5;
+        let playerAngle = Math.PI / 4;
+
+        // Keyboard state
+        const keys = {};
+
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = SCREEN_WIDTH;
+        canvas.height = SCREEN_HEIGHT;
+        canvas.style.width = `${SCREEN_WIDTH}px`;
+        canvas.style.height = `${SCREEN_HEIGHT}px`;
+
+        // Texture setup
+        let wallTextureData;
+
+        // Load the wall texture
+        function loadTexture() {
+            return new Promise((resolve, reject) => {
+                const img = document.getElementById('wallTexture');
+                if (img.complete) {
+                    createTextureData(img, resolve);
+                } else {
+                    img.onload = () => createTextureData(img, resolve);
+                    img.onerror = reject;
+                }
+            });
+        }
+
+        function createTextureData(img, resolve) {
+            const canvas = document.createElement('canvas');
+            canvas.width = TEXTURE_SIZE;
+            canvas.height = TEXTURE_SIZE;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
+            wallTextureData = ctx.getImageData(0, 0, TEXTURE_SIZE, TEXTURE_SIZE).data;
+            resolve();
+        }
+
+        // Event listeners for keyboard
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function gameLoop() {
+            movePlayer();
+            castRays();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function movePlayer() {
+            const moveSpeed = 3;
+            const rotSpeed = 0.05;
+
+            if (keys['ArrowUp'] || keys['KeyW']) {
+                const newX = playerX + Math.cos(playerAngle) * moveSpeed;
+                const newY = playerY + Math.sin(playerAngle) * moveSpeed;
+                if (!isWall(newX, newY)) {
+                    playerX = newX;
+                    playerY = newY;
+                }
+            }
+            if (keys['ArrowDown'] || keys['KeyS']) {
+                const newX = playerX - Math.cos(playerAngle) * moveSpeed;
+                const newY = playerY - Math.sin(playerAngle) * moveSpeed;
+                if (!isWall(newX, newY)) {
+                    playerX = newX;
+                    playerY = newY;
+                }
+            }
+            if (keys['ArrowLeft'] || keys['KeyA']) playerAngle -= rotSpeed;
+            if (keys['ArrowRight'] || keys['KeyD']) playerAngle += rotSpeed;
+
+            playerAngle = normalizeAngle(playerAngle);
+        }
+
+        function isWall(x, y) {
+            return map[Math.floor(y / TILE_SIZE)][Math.floor(x / TILE_SIZE)] === 1;
+        }
+
+        function normalizeAngle(angle) {
+            return angle - Math.floor(angle / (2 * Math.PI)) * (2 * Math.PI);
+        }
+
+        function castRay(angle) {
+            const rayDirX = Math.cos(angle);
+            const rayDirY = Math.sin(angle);
+
+            let mapX = Math.floor(playerX / TILE_SIZE);
+            let mapY = Math.floor(playerY / TILE_SIZE);
+
+            const deltaDistX = Math.abs(1 / rayDirX);
+            const deltaDistY = Math.abs(1 / rayDirY);
+
+            let stepX, stepY, sideDistX, sideDistY;
+
+            if (rayDirX < 0) {
+                stepX = -1;
+                sideDistX = (playerX / TILE_SIZE - mapX) * deltaDistX;
+            } else {
+                stepX = 1;
+                sideDistX = (mapX + 1 - playerX / TILE_SIZE) * deltaDistX;
+            }
+            if (rayDirY < 0) {
+                stepY = -1;
+                sideDistY = (playerY / TILE_SIZE - mapY) * deltaDistY;
+            } else {
+                stepY = 1;
+                sideDistY = (mapY + 1 - playerY / TILE_SIZE) * deltaDistY;
+            }
+
+            let hit = 0, side;
+            while (hit === 0) {
+                if (sideDistX < sideDistY) {
+                    sideDistX += deltaDistX;
+                    mapX += stepX;
+                    side = 0;
+                } else {
+                    sideDistY += deltaDistY;
+                    mapY += stepY;
+                    side = 1;
+                }
+                if (map[mapY][mapX] > 0) hit = 1;
+            }
+
+            let perpWallDist;
+            if (side === 0) {
+                perpWallDist = (mapX - playerX / TILE_SIZE + (1 - stepX) / 2) / rayDirX;
+            } else {
+                perpWallDist = (mapY - playerY / TILE_SIZE + (1 - stepY) / 2) / rayDirY;
+            }
+
+            const wallX = side === 0 ? 
+                playerY + perpWallDist * rayDirY : 
+                playerX + perpWallDist * rayDirX;
+
+            let textureX = Math.floor((wallX % TILE_SIZE) * TEXTURE_SIZE / TILE_SIZE);
+            if ((side === 0 && rayDirX > 0) || (side === 1 && rayDirY < 0)) {
+                textureX = TEXTURE_SIZE - textureX - 1;
+            }
+
+            return [perpWallDist, textureX, side];
+        }
+
+        function castRays() {
+            const imageData = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
+            const data = imageData.data;
+
+            for (let x = 0; x < SCREEN_WIDTH; x++) {
+                const rayAngle = playerAngle + Math.atan2(x - SCREEN_WIDTH / 2, SCREEN_DIST);
+                const [perpWallDist, textureX, side] = castRay(rayAngle);
+
+                const lineHeight = Math.floor(SCREEN_HEIGHT / perpWallDist);
+                let drawStart = -lineHeight / 2 + SCREEN_HEIGHT / 2;
+                if (drawStart < 0) drawStart = 0;
+                let drawEnd = lineHeight / 2 + SCREEN_HEIGHT / 2;
+                if (drawEnd >= SCREEN_HEIGHT) drawEnd = SCREEN_HEIGHT - 1;
+
+                const textureStep = TEXTURE_SIZE / lineHeight;
+                let texPos = (drawStart - SCREEN_HEIGHT / 2 + lineHeight / 2) * textureStep;
+
+                for (let y = drawStart; y < drawEnd; y++) {
+                    const textureY = (texPos % TEXTURE_SIZE);
+                    texPos += textureStep;
+
+                    // Implement simple texture filtering
+                    const tx1 = Math.floor(textureX) % TEXTURE_SIZE;
+                    const ty1 = Math.floor(textureY) % TEXTURE_SIZE;
+                    const tx2 = (tx1 + 1) % TEXTURE_SIZE;
+                    const ty2 = (ty1 + 1) % TEXTURE_SIZE;
+                    const fx = textureX - Math.floor(textureX);
+                    const fy = textureY - Math.floor(textureY);
+
+                    const c1 = getColorFromTexture(tx1, ty1);
+                    const c2 = getColorFromTexture(tx2, ty1);
+                    const c3 = getColorFromTexture(tx1, ty2);
+                    const c4 = getColorFromTexture(tx2, ty2);
+
+                    const color = bilinearInterpolate(c1, c2, c3, c4, fx, fy);
+
+                    const index = (y * SCREEN_WIDTH + x) * 4;
+                    
+                    // Apply color with distance-based shading
+                    const shade = 1 - Math.min(perpWallDist / (TILE_SIZE * 5), 0.7);
+                    data[index] = color.r * shade;
+                    data[index + 1] = color.g * shade;
+                    data[index + 2] = color.b * shade;
+                    data[index + 3] = 255;
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Helper functions for texture filtering
+        function getColorFromTexture(x, y) {
+            const index = (y * TEXTURE_SIZE + x) * 4;
+            return {
+                r: wallTextureData[index],
+                g: wallTextureData[index + 1],
+                b: wallTextureData[index + 2]
+            };
+        }
+
+        function bilinearInterpolate(c1, c2, c3, c4, fx, fy) {
+            const r = bilerp(c1.r, c2.r, c3.r, c4.r, fx, fy);
+            const g = bilerp(c1.g, c2.g, c3.g, c4.g, fx, fy);
+            const b = bilerp(c1.b, c2.b, c3.b, c4.b, fx, fy);
+            return { r, g, b };
+        }
+
+        function bilerp(v1, v2, v3, v4, fx, fy) {
+            const top = v1 * (1 - fx) + v2 * fx;
+            const bottom = v3 * (1 - fx) + v4 * fx;
+            return top * (1 - fy) + bottom * fy;
+        }
+
+        // Initialize the game
+        async function init() {
+            try {
+                await loadTexture();
+                gameLoop();
+            } catch (error) {
+                console.error('Failed to load texture:', error);
+            }
+        }
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>

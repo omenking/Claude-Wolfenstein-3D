@@ -101,3 +101,51 @@ This approach allows you to easily swap out different textures by changing the i
 
 # v7
 
+Asked it to correct multiple times over but it failed.
+
+# V8
+
+This updated version incorporates the improved raycasting and rendering techniques based on the Wolfenstein 3D rendering document. Key improvements include:
+
+More efficient integer-based DDA algorithm for raycasting.
+Accurate texture coordinate calculation.
+Proper handling of vertical and horizontal wall hits.
+Optimized wall rendering process.
+Simplified fisheye correction.
+
+These changes should result in better performance and more accurate rendering, including proper texture mapping without stretching. The game should now look and feel more like the original Wolfenstein 3D.
+
+# V9
+
+The grayscale and fragmented appearance is due to how we're currently handling the texture data. Let's fix this issue by properly using all color channels of the texture and adjusting our rendering method
+
+These changes should resolve the grayscale issue and improve the overall appearance of the textures. The fragmentation you're seeing might be due to the low resolution we're using (320x240). If you want a smoother look, you can increase the SCREEN_WIDTH and SCREEN_HEIGHT values, but keep in mind this will affect performance.
+
+This updated version includes:
+
+Increased screen resolution to 640x480 for better clarity.
+Proper handling of all color channels from the texture.
+A simple shading effect to give depth to the walls.
+Optimized raycasting using DDA algorithm.
+
+Make sure your wall_texture.webp file is in the same directory as this HTML file and is a color image (not grayscale). This should resolve the grayscale and fragmentation issues, giving you a more colorful and smoother rendering of the walls with proper textures.
+
+# V10
+
+These changes implement:
+
+Casting a ray for each screen column, which should reduce visible seams between wall segments.
+Bilinear texture filtering, which should smooth out the texture appearance, especially when close to walls.
+A smoother, distance-based shading that should reduce the stark contrast between wall sides.
+
+Replace the existing castRays function and add the new helper functions in your script. This should significantly reduce the fragmentation and provide a smoother appearance.
+If you're still seeing issues or if the performance has decreased significantly, we might need to consider more optimized approaches or possibly moving to a WebGL-based rendering solution for better performance and quality.
+
+This updated version includes:
+
+Increased screen resolution (640x480).
+Bilinear texture filtering for smoother textures.
+Improved distance-based shading.
+A ray cast for each screen column for better detail.
+
+These changes should significantly reduce the fragmentation and provide a smoother appearance. The textures should look less pixelated, especially when close to walls, and the overall image should be clearer.
