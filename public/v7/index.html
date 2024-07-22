@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wolfenstein 3D Clone</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: black; }
+        canvas { display: block; margin: auto; image-rendering: pixelated; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <img id="wallTexture" src="wall_texture.webp" style="display: none;">
+
+    <script>
+        // Constants
+        const SCREEN_WIDTH = 320;
+        const SCREEN_HEIGHT = 240;
+        const MAP_SIZE = 8;
+        const TILE_SIZE = 64;
+        const FOV = Math.PI / 3;
+        const HALF_FOV = FOV / 2;
+        const NUM_RAYS = SCREEN_WIDTH;
+        const PLAYER_SIZE = 10;
+        const TEXTURE_SIZE = 64;
+
+        // Game map (1 represents walls, 0 represents empty space)
+        const map = [
+            [1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 0, 1, 0, 0, 1, 0, 1],
+            [1, 0, 0, 0, 0, 0, 0, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1]
+        ];
+
+        // Player starting position
+        let playerX = TILE_SIZE * 1.5;
+        let playerY = TILE_SIZE * 1.5;
+        let playerAngle = Math.PI / 4;
+
+        // Keyboard state
+        const keys = {};
+
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = SCREEN_WIDTH;
+        canvas.height = SCREEN_HEIGHT;
+        canvas.style.width = `${SCREEN_WIDTH * 2}px`;
+        canvas.style.height = `${SCREEN_HEIGHT * 2}px`;
+
+        // Texture setup
+        let wallTextureData;
+
+        // Load the wall texture
+        function loadTexture() {
+            return new Promise((resolve, reject) => {
+                const img = document.getElementById('wallTexture');
+                if (img.complete) {
+                    createTextureData(img, resolve);
+                } else {
+                    img.onload = () => createTextureData(img, resolve);
+                    img.onerror = reject;
+                }
+            });
+        }
+
+        function createTextureData(img, resolve) {
+            const canvas = document.createElement('canvas');
+            canvas.width = TEXTURE_SIZE;
+            canvas.height = TEXTURE_SIZE;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
+            wallTextureData = ctx.getImageData(0, 0, TEXTURE_SIZE, TEXTURE_SIZE).data;
+            resolve();
+        }
+
+        // Event listeners for keyboard
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        function gameLoop() {
+            movePlayer();
+            castRays();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function movePlayer() {
+            const moveSpeed = 3;
+            const rotSpeed = 0.05;
+
+            if (keys['ArrowUp'] || keys['KeyW']) {
+                const newX = playerX + Math.cos(playerAngle) * moveSpeed;
+                const newY = playerY + Math.sin(playerAngle) * moveSpeed;
+                if (!isWall(newX, newY)) {
+                    playerX = newX;
+                    playerY = newY;
+                }
+            }
+            if (keys['ArrowDown'] || keys['KeyS']) {
+                const newX = playerX - Math.cos(playerAngle) * moveSpeed;
+                const newY = playerY - Math.sin(playerAngle) * moveSpeed;
+                if (!isWall(newX, newY)) {
+                    playerX = newX;
+                    playerY = newY;
+                }
+            }
+            if (keys['ArrowLeft'] || keys['KeyA']) playerAngle -= rotSpeed;
+            if (keys['ArrowRight'] || keys['KeyD']) playerAngle += rotSpeed;
+
+            playerAngle = normalizeAngle(playerAngle);
+        }
+
+        function isWall(x, y) {
+            return map[Math.floor(y / TILE_SIZE)][Math.floor(x / TILE_SIZE)] === 1;
+        }
+
+        function normalizeAngle(angle) {
+            return angle - Math.floor(angle / (2 * Math.PI)) * (2 * Math.PI);
+        }
+
+        function castRays() {
+            const imageData = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
+            const data = imageData.data;
+
+            for (let x = 0; x < SCREEN_WIDTH; x++) {
+                const rayAngle = playerAngle - HALF_FOV + (x / SCREEN_WIDTH) * FOV;
+                const [distance, wallX, wallY, isVertical] = castRay(rayAngle);
+
+                const perpDistance = distance * Math.cos(rayAngle - playerAngle);
+                const wallHeight = Math.min((TILE_SIZE * 5) / perpDistance * 277, SCREEN_HEIGHT);
+                const wallTop = (SCREEN_HEIGHT - wallHeight) / 2;
+
+                // Determine texture X based on where the ray hit the wall
+                let textureX;
+                if (isVertical) {
+                    textureX = Math.floor(wallY % TILE_SIZE);
+                } else {
+                    textureX = Math.floor(wallX % TILE_SIZE);
+                }
+                if ((isVertical && Math.cos(rayAngle) > 0) || (!isVertical && Math.sin(rayAngle) < 0)) {
+                    textureX = TEXTURE_SIZE - 1 - textureX;
+                }
+
+                // Ensure textureX is always within bounds
+                textureX = Math.min(Math.max(textureX, 0), TEXTURE_SIZE - 1);
+
+                const textureStep = TEXTURE_SIZE / wallHeight;
+                let texturePos = 0;
+
+                for (let y = 0; y < SCREEN_HEIGHT; y++) {
+                    const index = (y * SCREEN_WIDTH + x) * 4;
+
+                    if (y < wallTop) {
+                        // Ceiling
+                        data[index] = data[index + 1] = data[index + 2] = 100;
+                    } else if (y > wallTop + wallHeight) {
+                        // Floor
+                        data[index] = data[index + 1] = data[index + 2] = 50;
+                    } else {
+                        // Wall
+                        const textureY = Math.floor(texturePos) % TEXTURE_SIZE;
+                        const textureIndex = (textureY * TEXTURE_SIZE + textureX) * 4;
+                        data[index] = wallTextureData[textureIndex];
+                        data[index + 1] = wallTextureData[textureIndex + 1];
+                        data[index + 2] = wallTextureData[textureIndex + 2];
+
+                        // Simple distance-based shading
+                        const shade = 1 - Math.min(distance / (TILE_SIZE * 5), 1);
+                        data[index] *= shade;
+                        data[index + 1] *= shade;
+                        data[index + 2] *= shade;
+
+                        texturePos += textureStep;
+                    }
+                    data[index + 3] = 255; // Alpha
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function castRay(angle) {
+            const sin = Math.sin(angle);
+            const cos = Math.cos(angle);
+
+            let x = playerX;
+            let y = playerY;
+            let dx = cos > 0 ? 1 : -1;
+            let dy = sin > 0 ? 1 : -1;
+
+            let nextVertX = cos > 0 ? Math.floor(x / TILE_SIZE) * TILE_SIZE + TILE_SIZE : Math.floor(x / TILE_SIZE) * TILE_SIZE;
+            let nextVertY = y + (nextVertX - x) * Math.tan(angle);
+
+            let nextHorzY = sin > 0 ? Math.floor(y / TILE_SIZE) * TILE_SIZE + TILE_SIZE : Math.floor(y / TILE_SIZE) * TILE_SIZE;
+            let nextHorzX = x + (nextHorzY - y) / Math.tan(angle);
+
+            let vertDist = Number.MAX_VALUE;
+            let horzDist = Number.MAX_VALUE;
+
+            while (nextVertX >= 0 && nextVertX < MAP_SIZE * TILE_SIZE && nextVertY >= 0 && nextVertY < MAP_SIZE * TILE_SIZE) {
+                if (isWall(nextVertX - (cos <= 0 ? 1 : 0), nextVertY)) {
+                    vertDist = Math.sqrt((nextVertX - x) ** 2 + (nextVertY - y) ** 2);
+                    break;
+                }
+                nextVertX += dx * TILE_SIZE;
+                nextVertY += dy * TILE_SIZE * Math.abs(Math.tan(angle));
+            }
+
+            while (nextHorzX >= 0 && nextHorzX < MAP_SIZE * TILE_SIZE && nextHorzY >= 0 && nextHorzY < MAP_SIZE * TILE_SIZE) {
+                if (isWall(nextHorzX, nextHorzY - (sin <= 0 ? 1 : 0))) {
+                    horzDist = Math.sqrt((nextHorzX - x) ** 2 + (nextHorzY - y) ** 2);
+                    break;
+                }
+                nextHorzY += dy * TILE_SIZE;
+                nextHorzX += dx * TILE_SIZE / Math.abs(Math.tan(angle));
+            }
+
+            if (vertDist < horzDist) {
+                return [vertDist, nextVertX, nextVertY, true];
+            } else {
+                return [horzDist, nextHorzX, nextHorzY, false];
+            }
+        }
+
+        // Initialize the game
+        async function init() {
+            try {
+                await loadTexture();
+                gameLoop();
+            } catch (error) {
+                console.error('Failed to load texture:', error);
+            }
+        }
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
