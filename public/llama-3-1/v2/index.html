@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Wolfenstein 3D Clone</title>
+	<style>
+		body { margin: 0; overflow: hidden; }
+		canvas { display: block; background-color: #f0f0f0;}
+	</style>
+</head>
+<body>
+	<canvas id="game-canvas" width="640" height="480"></canvas>
+	<script>
+    console.log('hello3')
+		const canvas = document.getElementById('game-canvas');
+		const ctx = canvas.getContext('2d');
+
+		// Player variables
+		let playerX = 100;
+		let playerY = 100;
+		let playerDir = 0; // 0-360 degrees
+		let fov = 60; // Field of view
+
+		// 3D world variables
+		let walls = [
+			{x: 100, y: 100, w: 100, h: 100}, // wall 1
+			{x: 300, y: 100, w: 100, h: 100}, // wall 2
+		];
+
+		function update() {}
+
+    function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Raycasting loop
+  for (let x = 0; x < canvas.width; x++) {
+    let rayDir = playerDir + (x - canvas.width / 2) * fov / canvas.width;
+    let distance = 100000; // max distance
+    let wallIndex = -1;
+
+    // Check for wall collisions
+    for (let i = 0; i < walls.length; i++) {
+      let wall = walls[i];
+      let dx = wall.x - playerX;
+      let dy = wall.y - playerY;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+      let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      if (angle >= rayDir - fov / 2 && angle <= rayDir + fov / 2) {
+        if (dist < distance) {
+          distance = dist;
+          wallIndex = i;
+        }
+      }
+    }
+
+    // Render wall
+    if (wallIndex !== -1) {
+      let wall = walls[wallIndex];
+      let wallHeight = canvas.height / distance * 100;
+      let wallTop = canvas.height / 2 - wallHeight / 2;
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(x, wallTop, 1, wallHeight);
+    }
+  }
+}
+
+		function loop() {
+			update();
+			render();
+			requestAnimationFrame(loop);
+		}
+
+		loop();
+	</script>
+</body>
+</html>

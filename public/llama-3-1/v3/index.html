@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Wolfenstein 3D Clone</title>
+	<style>
+		body { margin: 0; overflow: hidden; }
+		canvas { display: block; }
+	</style>
+</head>
+<body>
+	<canvas id="game-canvas" width="640" height="480"></canvas>
+	<script>
+		const canvas = document.getElementById('game-canvas');
+		const ctx = canvas.getContext('2d');
+
+		let playerX = 100;
+		let playerY = canvas.height / 2;
+		let playerDir = 0; // Face the wall directly
+		let fov = 60; // Field of view
+
+		let walls = [
+			{x: 200, y: canvas.height / 2, w: 10, h: 100}, // wall 1
+		];
+
+		function update() {}
+
+		function render() {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+			// Draw player position
+			ctx.fillStyle = '#0000ff';
+			ctx.fillRect(playerX, playerY, 10, 10);
+
+			// Render a single wall
+			let wallX = 200;
+			let wallHeight = 100;
+			ctx.fillStyle = '#ff0000';
+			ctx.fillRect(wallX, canvas.height / 2 - wallHeight / 2, 10, wallHeight);
+
+			console.log(`Player direction: ${playerDir}`);
+		}
+
+ 
+    function renderMiniMap() {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(canvas.width - 100, 0, 100, 100);
+
+  // Player position
+  ctx.fillStyle = '#0000ff';
+  ctx.fillRect(canvas.width - 100 + playerX / 4, 50 - playerY / 4, 5, 5);
+
+  // Direction indicator
+  ctx.fillStyle = '#0000ff';
+  ctx.beginPath();
+  ctx.moveTo(canvas.width - 100 + playerX / 4, 50 - playerY / 4);
+  ctx.lineTo(canvas.width - 100 + playerX / 4 + Math.cos(playerDir) * 10, 50 - playerY / 4 + Math.sin(playerDir) * 10);
+  ctx.stroke();
+
+  // Wall position
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(canvas.width - 100 + walls[0].x / 4, 50 - walls[0].y / 4, 5, 5);
+}
+
+		function loop() {
+			update();
+			render();
+			renderMiniMap();
+			requestAnimationFrame(loop);
+		}
+
+		loop();
+	</script>
+</body>
+</html>
